@@ -79,52 +79,59 @@ func (gates *Gates) Open() {
 	ticks := 0
 	gates.setStatusLEDs()
 	gates.startingGate.High()
-	gates.Gate1.openRequestOutput.High()
+	//Request first gate opens
+	gates.Gate1.requestOpen()
+	//Wait for the gate to be open
 	for gates.Gate1.isClosed() {
 		gates.setStatusLEDs()
 		ticks++
+		//Timeout after about 5 seconds
 		if ticks > 50 {
-			gates.Gate1.openRequestOutput.Low()
 			gates.startingGate.Low()
 			return
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
 	ticks = 0
+	//The first gate has started opening, wait for it to close again
 	for !gates.Gate1.isClosed() {
+		gates.setStatusLEDs()
 		ticks++
-		if ticks > 50 {
-			gates.Gate1.openRequestOutput.Low()
+		//Timeout after about 2 minutes
+		if ticks > 120000 {
 			gates.startingGate.Low()
 			return
 		}
-		gates.setStatusLEDs()
 		gates.Gate1.openRequestOutput.Low()
 		time.Sleep(100 * time.Millisecond)
 	}
-	gates.Gate2.openRequestOutput.High()
+	ticks = 0
+	//The first gate has closed, open the second gate
+	gates.Gate2.requestOpen()
+	//Wait for the second gate to open
 	for gates.Gate2.isClosed() {
-		ticks++
 		gates.setStatusLEDs()
+		ticks++
+		//Timeout after about 5 seconds
 		if ticks > 50 {
-			gates.Gate2.openRequestOutput.Low()
 			gates.startingGate.Low()
 			return
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
 	ticks = 0
+	//The second gate has opened, wait for it to close
 	for !gates.Gate2.isClosed() {
-		ticks++
 		gates.setStatusLEDs()
-		if ticks > 50 {
-			gates.Gate2.openRequestOutput.Low()
+		ticks++
+		//Timeout after about 2 minutes
+		if ticks > 120000 {
 			gates.startingGate.Low()
 			return
 		}
-		gates.Gate2.openRequestOutput.Low()
 		time.Sleep(100 * time.Millisecond)
 	}
+	//Second gate has closed, cycle complete
 	gates.startingGate.Low()
 	return
 }
@@ -159,4 +166,10 @@ func (g *Gate) isClosed() bool {
 
 func (g *Gate) checkOpenRequestInput() bool {
 	return !g.openRequestInput.Get()
+}
+
+func (g *Gate) requestOpen() {
+	g.openRequestOutput.High()
+	time.Sleep(500 * time.Millisecond)
+	g.openRequestOutput.Low()
 }

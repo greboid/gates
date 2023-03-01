@@ -76,23 +76,54 @@ func main() {
 }
 
 func (gates *Gates) Open() {
+	ticks := 0
 	gates.setStatusLEDs()
 	gates.startingGate.High()
 	gates.Gate1.openRequestOutput.High()
 	for gates.Gate1.isClosed() {
 		gates.setStatusLEDs()
+		ticks++
+		if ticks > 50 {
+			gates.Gate1.openRequestOutput.Low()
+			gates.startingGate.Low()
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
+	ticks = 0
 	for !gates.Gate1.isClosed() {
+		ticks++
+		if ticks > 50 {
+			gates.Gate1.openRequestOutput.Low()
+			gates.startingGate.Low()
+			return
+		}
 		gates.setStatusLEDs()
 		gates.Gate1.openRequestOutput.Low()
+		time.Sleep(100 * time.Millisecond)
 	}
 	gates.Gate2.openRequestOutput.High()
 	for gates.Gate2.isClosed() {
+		ticks++
 		gates.setStatusLEDs()
+		if ticks > 50 {
+			gates.Gate2.openRequestOutput.Low()
+			gates.startingGate.Low()
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
+	ticks = 0
 	for !gates.Gate2.isClosed() {
+		ticks++
 		gates.setStatusLEDs()
+		if ticks > 50 {
+			gates.Gate2.openRequestOutput.Low()
+			gates.startingGate.Low()
+			return
+		}
 		gates.Gate2.openRequestOutput.Low()
+		time.Sleep(100 * time.Millisecond)
 	}
 	gates.startingGate.Low()
 	return

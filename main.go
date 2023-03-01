@@ -2,6 +2,7 @@ package main
 
 import (
 	"machine"
+	"time"
 )
 
 type Gate struct {
@@ -18,6 +19,7 @@ type Gates struct {
 	Gate2        *Gate
 	startingGate machine.Pin
 	endingGate   machine.Pin
+	debugLED     machine.Pin
 }
 
 func main() {
@@ -41,7 +43,8 @@ func main() {
 		Gate1:        outerGate,
 		Gate2:        innerGate,
 		startingGate: machine.D7,
-		endingGate:   machine.D13,
+		endingGate:   machine.ADC0,
+		debugLED:     machine.LED,
 	}
 	gates.Init()
 	for {
@@ -52,7 +55,8 @@ func main() {
 					Gate1:        outerGate,
 					Gate2:        innerGate,
 					startingGate: machine.D7,
-					endingGate:   machine.D13,
+					endingGate:   machine.ADC0,
+					debugLED:     machine.LED,
 				}
 				inbound.Open()
 			}
@@ -60,40 +64,38 @@ func main() {
 				outbound := Gates{
 					Gate1:        innerGate,
 					Gate2:        outerGate,
-					startingGate: machine.D13,
+					startingGate: machine.ADC0,
 					endingGate:   machine.D7,
+					debugLED:     machine.LED,
 				}
 				outbound.Open()
 			}
 		}
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 
 func (gates *Gates) Open() {
-	for {
+	gates.setStatusLEDs()
+	gates.startingGate.High()
+	gates.Gate1.openRequestOutput.High()
+	for gates.Gate1.isClosed() {
 		gates.setStatusLEDs()
-		gates.startingGate.High()
-		gates.Gate1.openRequestOutput.High()
-		for gates.Gate1.isClosed() {
-			gates.setStatusLEDs()
-			continue
-		}
-		for !gates.Gate1.isClosed() {
-			gates.setStatusLEDs()
-			gates.Gate1.openRequestOutput.Low()
-		}
-		gates.Gate2.openRequestOutput.High()
-		for gates.Gate2.isClosed() {
-			gates.setStatusLEDs()
-			continue
-		}
-		for !gates.Gate2.isClosed() {
-			gates.setStatusLEDs()
-			gates.Gate2.openRequestOutput.Low()
-		}
-		gates.startingGate.Low()
-		return
 	}
+	for !gates.Gate1.isClosed() {
+		gates.setStatusLEDs()
+		gates.Gate1.openRequestOutput.Low()
+	}
+	gates.Gate2.openRequestOutput.High()
+	for gates.Gate2.isClosed() {
+		gates.setStatusLEDs()
+	}
+	for !gates.Gate2.isClosed() {
+		gates.setStatusLEDs()
+		gates.Gate2.openRequestOutput.Low()
+	}
+	gates.startingGate.Low()
+	return
 }
 
 func (gates *Gates) Init() {

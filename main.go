@@ -100,7 +100,7 @@ func (gates *Gates) cycle(gate1 *Gate, gate2 *Gate) {
 	for !gate1.isClosed() {
 		ticks++
 		//Timeout after about 2 minutes
-		if ticks > 120000 {
+		if ticks > 1200 {
 			gate1.idleOutput.High()
 			return
 		}
@@ -125,7 +125,7 @@ func (gates *Gates) cycle(gate1 *Gate, gate2 *Gate) {
 	for !gate2.isClosed() {
 		ticks++
 		//Timeout after about 2 minutes
-		if ticks > 120000 {
+		if ticks > 1200 {
 			gate2.idleOutput.High()
 			return
 		}

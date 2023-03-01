@@ -57,7 +57,6 @@ func main() {
 		}
 	}()
 	for {
-		//gates.setStatusLEDs()
 		if outerGate.isClosed() && innerGate.isClosed() {
 			if outerGate.checkOpenRequestInput() {
 				gates.Inbound()
@@ -84,12 +83,10 @@ func (gates *Gates) Outbound() {
 
 func (gates *Gates) cycle(gate1 *Gate, gate2 *Gate) {
 	ticks := 0
-	//gates.setStatusLEDs()
 	//Request first gate opens
 	gate1.requestOpen()
 	//Wait for the gate to be open
 	for gate1.isClosed() {
-		//gates.setStatusLEDs()
 		ticks++
 		//Timeout after about 5 seconds
 		if ticks > 50 {
@@ -101,7 +98,6 @@ func (gates *Gates) cycle(gate1 *Gate, gate2 *Gate) {
 	ticks = 0
 	//The first gate has started opening, wait for it to close again
 	for !gate1.isClosed() {
-		//gates.setStatusLEDs()
 		ticks++
 		//Timeout after about 2 minutes
 		if ticks > 120000 {
@@ -116,7 +112,6 @@ func (gates *Gates) cycle(gate1 *Gate, gate2 *Gate) {
 	gate2.requestOpen()
 	//Wait for the second gate to open
 	for gate2.isClosed() {
-		//gates.setStatusLEDs()
 		ticks++
 		//Timeout after about 5 seconds
 		if ticks > 50 {
@@ -128,7 +123,6 @@ func (gates *Gates) cycle(gate1 *Gate, gate2 *Gate) {
 	ticks = 0
 	//The second gate has opened, wait for it to close
 	for !gate2.isClosed() {
-		//gates.setStatusLEDs()
 		ticks++
 		//Timeout after about 2 minutes
 		if ticks > 120000 {

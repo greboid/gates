@@ -43,8 +43,7 @@ func main() {
 		startingGate: machine.D7,
 		endingGate:   machine.D13,
 	}
-	outerGate.Init()
-	innerGate.Init()
+	gates.Init()
 	for {
 		gates.setStatusLEDs()
 		if outerGate.isClosed() && innerGate.isClosed() {
@@ -100,6 +99,8 @@ func (gates *Gates) Open() {
 func (gates *Gates) Init() {
 	gates.Gate1.Init()
 	gates.Gate2.Init()
+	gates.startingGate.Configure(machine.PinConfig{Mode: machine.PinOutput})
+	gates.endingGate.Configure(machine.PinConfig{Mode: machine.PinOutput})
 	gates.startingGate.Low()
 	gates.endingGate.Low()
 }

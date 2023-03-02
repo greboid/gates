@@ -5,6 +5,12 @@ import (
 	"time"
 )
 
+const (
+	gateOpenTimeout  = 50   //In number of ticks, so varies depending on sleep interval
+	gateCloseTimeout = 1200 //In number of ticks, so varies depending on sleep interval
+	SleepInterval    = 100  // In milliseconds
+)
+
 type Gate struct {
 	Name              string
 	openRequestInput  machine.Pin
@@ -77,7 +83,7 @@ func main() {
 					println("Gate1 open")
 					gates.gate1Opened = true
 					gates.gate1.openRequestOutput.Low()
-				} else if gates.cycleTicks >= 50 {
+				} else if gates.cycleTicks >= gateOpenTimeout {
 					println("Timing out gate1 opening")
 					gates.Reset()
 				}
@@ -87,7 +93,7 @@ func main() {
 					gates.gate1Closed = true
 					gates.cycleTicks = -1
 					gates.gate1.workingOutput.Low()
-				} else if gates.cycleTicks >= 100 {
+				} else if gates.cycleTicks >= gateCloseTimeout {
 					println("Timing out gate1 closing")
 					gates.Reset()
 				}
@@ -100,7 +106,7 @@ func main() {
 					println("Gate2 open")
 					gates.gate2Opened = true
 					gates.gate2.openRequestOutput.Low()
-				} else if gates.cycleTicks >= 50 {
+				} else if gates.cycleTicks >= gateOpenTimeout {
 					println("Timing out gate2 opening")
 					gates.Reset()
 				}
@@ -110,7 +116,7 @@ func main() {
 					gates.gate2Closed = true
 					gates.cycleTicks = -1
 					gates.gate2.workingOutput.Low()
-				} else if gates.cycleTicks >= 100 {
+				} else if gates.cycleTicks >= gateCloseTimeout {
 					println("Timing out gate2 closing")
 					gates.Reset()
 				}
@@ -132,7 +138,7 @@ func main() {
 			gates.gate1 = innerGate
 			gates.gate2 = outerGate
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(SleepInterval * time.Millisecond)
 	}
 }
 

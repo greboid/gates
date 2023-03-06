@@ -14,66 +14,63 @@ const (
 type Gate struct {
 	Name              string
 	openRequestInput  machine.Pin
-	stuckRequestInput machine.Pin
 	closedInput       machine.Pin
 	closedOutput      machine.Pin
 	openRequestOutput machine.Pin
 	workingOutput     machine.Pin
-	openOutput        machine.Pin
 }
 
 type Controller struct {
-	inbound         bool
-	outbound        bool
-	gate1Opened     bool
-	gate1Closed     bool
-	gate2Opened     bool
-	gate2Closed     bool
-	outerGate       *Gate
-	innerGate       *Gate
-	inboundCycling  machine.Pin
-	outboundCycling machine.Pin
-	gate1           *Gate
-	gate2           *Gate
-	cycleTicks      int
+	stuckStarted      bool
+	stuckGate         *Gate
+	inbound           bool
+	outbound          bool
+	gate1Opened       bool
+	gate1Closed       bool
+	gate2Opened       bool
+	gate2Closed       bool
+	outerGate         *Gate
+	innerGate         *Gate
+	inboundCycling    machine.Pin
+	outboundCycling   machine.Pin
+	gate1             *Gate
+	gate2             *Gate
+	cycleTicks        int
+	stuckRequestInput machine.Pin
 }
 
 func main() {
 	outerGate := &Gate{
 		Name:              "Outer",
 		openRequestInput:  machine.D2,
-		stuckRequestInput: machine.NoPin,
 		closedInput:       machine.D4,
-		closedOutput:      machine.D5,
-		openRequestOutput: machine.D6,
-		workingOutput:     machine.ADC3,
-		openOutput:        machine.ADC1,
+		openRequestOutput: machine.ADC0,
+		closedOutput:      machine.D10,
+		workingOutput:     machine.D8,
 	}
 	innerGate := &Gate{
 		Name:              "Inner",
-		openRequestInput:  machine.D8,
-		stuckRequestInput: machine.NoPin,
-		closedInput:       machine.D10,
+		openRequestInput:  machine.D3,
+		closedInput:       machine.D5,
+		openRequestOutput: machine.ADC1,
 		closedOutput:      machine.D11,
-		openRequestOutput: machine.D12,
-		workingOutput:     machine.ADC4,
-		openOutput:        machine.ADC2,
+		workingOutput:     machine.D9,
 	}
 	gates := &Controller{
-		gate1Opened:     false,
-		gate1Closed:     false,
-		gate2Opened:     false,
-		gate2Closed:     false,
-		outerGate:       outerGate,
-		innerGate:       innerGate,
-		inboundCycling:  machine.D7,
-		outboundCycling: machine.ADC0,
+		outerGate:         outerGate,
+		innerGate:         innerGate,
+		inboundCycling:    machine.D6,
+		outboundCycling:   machine.D7,
+		stuckRequestInput: machine.D12,
 	}
 	gates.Init()
 	for {
-		//Set the status LEDs
 		gates.setStatusLEDs()
-		if gates.gate1 != nil && gates.gate2 != nil {
+		if gates.stuckGate != nil {
+			gates.handleStuckGates()
+		} else if !gates.stuckRequestInput.Get() {
+			gates.handleStuckRequest()
+		} else if gates.gate1 != nil && gates.gate2 != nil {
 			if !gates.gate1Opened {
 				if gates.cycleTicks == 0 {
 					println("Opening gate1")
@@ -126,23 +123,73 @@ func main() {
 			}
 			gates.cycleTicks++
 		} else if outerGate.checkOpenRequestInput() && innerGate.isClosed() {
-			println("Starting inbound cycle")
-			gates.Reset()
-			gates.inbound = true
-			gates.gate1 = outerGate
-			gates.gate2 = innerGate
+			gates.startInboundCycle()
 		} else if innerGate.checkOpenRequestInput() && outerGate.isClosed() {
-			println("Starting outbound cycle")
-			gates.Reset()
-			gates.outbound = true
-			gates.gate1 = innerGate
-			gates.gate2 = outerGate
+			gates.startOutboundCycle()
 		}
 		time.Sleep(SleepInterval * time.Millisecond)
 	}
 }
 
+func (gates *Controller) startInboundCycle() {
+	println("Starting inbound cycle")
+	gates.Reset()
+	gates.inbound = true
+	gates.gate1 = gates.outerGate
+	gates.gate2 = gates.innerGate
+}
+
+func (gates *Controller) startOutboundCycle() {
+	println("Starting outbound cycle")
+	gates.Reset()
+	gates.outbound = true
+	gates.gate1 = gates.innerGate
+	gates.gate2 = gates.outerGate
+}
+
+func (gates *Controller) handleStuckRequest() {
+	println("Stuck request received")
+	gates.Reset()
+	if gates.innerGate.isOpen() {
+		println("Stuck: innergate open, opening inner")
+		gates.stuckGate = gates.innerGate
+		gates.innerGate.workingOutput.High()
+		gates.innerGate.openRequestOutput.High()
+	} else if gates.outerGate.isOpen() {
+		println("Stuck: outergate open, opening outer")
+		gates.stuckGate = gates.outerGate
+		gates.outerGate.workingOutput.High()
+		gates.outerGate.openRequestOutput.High()
+	} else {
+		println("Stuck: Opening outer")
+		gates.stuckGate = gates.outerGate
+		gates.outerGate.workingOutput.High()
+		gates.outerGate.openRequestOutput.High()
+	}
+}
+
+func (gates *Controller) handleStuckGates() {
+	if !gates.stuckStarted && gates.cycleTicks > gateOpenTimeout {
+		println("Stuck: Timeout opening, resetting")
+		gates.Reset()
+	} else if !gates.stuckStarted {
+		if gates.stuckGate.isOpen() {
+			println("Stuck: Gate opening, waiting for close")
+			gates.stuckStarted = true
+			gates.stuckGate.openRequestOutput.Low()
+		}
+	} else if gates.stuckStarted && gates.stuckGate.isClosed() {
+		println("Stuck complete")
+		gates.Reset()
+	} else if gates.stuckStarted && gates.cycleTicks > gateCloseTimeout {
+		println("Stuck: Timeout closing, resetting")
+		gates.Reset()
+	}
+	gates.cycleTicks++
+}
+
 func (gates *Controller) Init() {
+	gates.stuckRequestInput.Configure(machine.PinConfig{Mode: machine.PinInputPullup})
 	gates.inboundCycling.Configure(machine.PinConfig{Mode: machine.PinOutput})
 	gates.outboundCycling.Configure(machine.PinConfig{Mode: machine.PinOutput})
 	gates.inboundCycling.Low()
@@ -152,6 +199,8 @@ func (gates *Controller) Init() {
 }
 
 func (gates *Controller) Reset() {
+	gates.stuckStarted = false
+	gates.stuckGate = nil
 	gates.gate2Opened = false
 	gates.gate2Closed = false
 	gates.gate1Opened = false
@@ -167,7 +216,6 @@ func (gates *Controller) Reset() {
 
 func (g *Gate) Init() {
 	g.openRequestInput.Configure(machine.PinConfig{Mode: machine.PinInputPullup})
-	g.stuckRequestInput.Configure(machine.PinConfig{Mode: machine.PinInputPullup})
 	g.closedInput.Configure(machine.PinConfig{Mode: machine.PinInputPullup})
 	g.closedOutput.Configure(machine.PinConfig{Mode: machine.PinOutput})
 	g.openRequestOutput.Configure(machine.PinConfig{Mode: machine.PinOutput})
@@ -182,10 +230,8 @@ func (g *Gate) Reset() {
 }
 
 func (gates *Controller) setStatusLEDs() {
-	gates.innerGate.closedOutput.Set(gates.innerGate.closedInput.Get())
-	gates.outerGate.closedOutput.Set(gates.outerGate.closedInput.Get())
-	gates.innerGate.openOutput.Set(!gates.innerGate.closedInput.Get())
-	gates.outerGate.openOutput.Set(!gates.outerGate.closedInput.Get())
+	gates.innerGate.closedOutput.Set(gates.innerGate.isClosed())
+	gates.outerGate.closedOutput.Set(gates.outerGate.isClosed())
 	gates.inboundCycling.Set(gates.inbound)
 	gates.outboundCycling.Set(gates.outbound)
 }

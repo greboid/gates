@@ -1,0 +1,47 @@
+= Gate interlock
+
+If you require a pair of interlocked gates or doors, eg to create an anti tailgate solution, you will have no doubt found many flaws in the existing easily affordable/accessible solutions.  The particular set of gates I was working with were incapable of talking to each other and the access control system has no concept of an interlocked door.
+
+An arduino should be capable of bridging the gap between access control and the gates creating an interlocked pair of doors and provide a more flexible and easier to maintain system than a proprietary solution from either an access control provider or from a motor provider.
+
+The code is designed for an arduino nano, but with some PIN changes should be easy enough to use on most microcontrollers.
+
+== Definitions
+Outer Gate:: The insecure side of the interlocked doors/gates
+Inner Gate:: The secure side of the interlocked doors/gates
+Inbound:: Going from the outer side, to the inner side.
+Outbound:: Going from the inner side to the outer side.
+
+== Inputs/Outputs
+
+[discrete]
+== Inputs
+- Inbound access approved (D1)
+- Outbound access approved (D3)
+- User is stuck in between inner and outer gates (D12)
+- Outer gate is closed (D4)
+- Inner gate is closed (D5)
+
+[discrete]
+== Outputs
+- Outer gate open request (ADC0)
+- Inner gate open request (ADC1)
+
+[discrete]
+== Status indicators
+ - Outer gate is closed (D10)
+ - Inner gate is closed (D11)
+ - Outer gate is opening or closing (D8)
+ - Inner gate is opening or closing (D9)
+ - Inbound cycle in progress (D6)
+ - Outbound cycle in progress (D7)
+
+== Logic
+ - It is assumed gates auto close.
+ - Only a single gate is allowed to be open at a time.
+- If one of the gates is still open when an access request is received, this will be ignored. footnote:speedoptim[I plan to support allowing access via a closing gate (the gate would be requested to open as it was closing) as a speed optimisation for users.] footnote:buffer[I plan to support a small buffer on a single request, this way you don't have to fully wait for the gate to shut before scanning.]
+ - If the user is stuck, if either gate is already open this gate will be opened.
+ - If the user is stuck and neither gate is open the outer gate will be opened.
+ - If the user is stuck, they user should exit via the opened gate, or they will become trapped again.
+ - When a gate is requested to open, it is assumed this will happen almost immediately, if it does time out, the system goes idle.
+ - Gates will open and shut within a timeout period, if this times out, the system goes idle.

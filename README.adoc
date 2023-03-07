@@ -37,11 +37,12 @@ Outbound:: Going from the inner side to the outer side.
  - Outbound cycle in progress (D7)
 
 == Logic
- - It is assumed gates auto close.
- - Only a single gate is allowed to be open at a time.
-- If one of the gates is still open when an access request is received, this will be ignored. footnote:speedoptim[I plan to support allowing access via a closing gate (the gate would be requested to open as it was closing) as a speed optimisation for users.] footnote:buffer[I plan to support a small buffer on a single request, this way you don't have to fully wait for the gate to shut before scanning.]
- - If the user is stuck, if either gate is already open this gate will be opened.
- - If the user is stuck and neither gate is open the outer gate will be opened.
- - If the user is stuck, they user should exit via the opened gate, or they will become trapped again.
- - When a gate is requested to open, it is assumed this will happen almost immediately, if it does time out, the system goes idle.
- - Gates will open and shut within a timeout period, if this times out, the system goes idle.
+- It is assumed gates auto close.
+- When the first gate in the interlock closes, the second will open automatically.
+- Only a single gate is allowed to be open at a time.
+- If one of the gates is still open when an access request is received, this will be ignored.footnote:optim[Plan to add: if the gate is closing, and you scan to leave via it, it'll just open.]
+- If the user is stuck, if either gate is already open this gate will be opened.
+- If the user is stuck and neither gate is open the outer gate will be opened.
+- If the user is stuck, they user should exit via the opened gate, or they will become trapped again.
+- If a gate is requested to open, and it doesn't open this times out  and the system goes idle.footnote:opentimeout[5 seconds]
+- If a gate fails to open and shut, this times out and the system goes idle.footnote:closetimeout[2 minutes]

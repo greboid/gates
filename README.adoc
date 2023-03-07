@@ -40,7 +40,8 @@ Outbound:: Going from the inner side to the outer side.
 - It is assumed gates auto close.
 - When the first gate in the interlock closes, the second will open automatically.
 - Only a single gate is allowed to be open at a time.
-- If one of the gates is still open when an access request is received, this will be ignored.footnote:optim[Plan to add: if the gate is closing, and you scan to leave via it, it'll just open.]
+- If the user requests access at a gate that is closing, the gate will be opened and the cycle started.
+- If the user requests access and the opposite gate is still closing, ths signal will be ignored.footnote:buffer[I may add a small buffer window for this so the cycle will start immediately upon closure]
 - If the user is stuck, if either gate is already open this gate will be opened.
 - If the user is stuck and neither gate is open the outer gate will be opened.
 - If the user is stuck, they user should exit via the opened gate, or they will become trapped again.

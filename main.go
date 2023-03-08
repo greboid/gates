@@ -18,6 +18,7 @@ type Gate struct {
 	closedOutput      machine.Pin
 	openRequestOutput machine.Pin
 	workingOutput     machine.Pin
+	enabledInput      machine.Pin
 }
 
 type Controller struct {
@@ -48,6 +49,7 @@ func main() {
 		openRequestOutput: machine.ADC0,
 		closedOutput:      machine.D10,
 		workingOutput:     machine.D8,
+		enabledInput:      machine.ADC3,
 	}
 	innerGate := &Gate{
 		Name:              "Inner",
@@ -56,6 +58,7 @@ func main() {
 		openRequestOutput: machine.ADC1,
 		closedOutput:      machine.D11,
 		workingOutput:     machine.D9,
+		enabledInput:      machine.ADC4,
 	}
 	gates := &Controller{
 		outerGate:         outerGate,
@@ -229,6 +232,7 @@ func (gates *Controller) Reset() {
 func (g *Gate) Init() {
 	g.openRequestInput.Configure(machine.PinConfig{Mode: machine.PinInputPullup})
 	g.closedInput.Configure(machine.PinConfig{Mode: machine.PinInputPullup})
+	g.enabledInput.Configure(machine.PinConfig{Mode: machine.PinInputPullup})
 	g.closedOutput.Configure(machine.PinConfig{Mode: machine.PinOutput})
 	g.openRequestOutput.Configure(machine.PinConfig{Mode: machine.PinOutput})
 	g.workingOutput.Configure(machine.PinConfig{Mode: machine.PinOutput})
@@ -259,4 +263,8 @@ func (g *Gate) isOpen() bool {
 
 func (g *Gate) checkOpenRequestInput() bool {
 	return !g.openRequestInput.Get()
+}
+
+func (g *Gate) isEnabled() bool {
+	return !g.enabledInput.Get()
 }

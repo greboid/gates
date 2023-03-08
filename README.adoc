@@ -37,6 +37,11 @@ Outbound:: Going from the inner side to the outer side.
  - Outbound cycle in progress (D7)
  - Combined gate open (ADC2)
 
+[discrete]
+== Jumpers
+- Outer gate disabled
+- Inner gate disabled
+
 == Logic
 - It is assumed gates auto close.
 - When the first gate in the interlock closes, the second will open automatically.

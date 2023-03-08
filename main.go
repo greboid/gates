@@ -106,7 +106,7 @@ func main() {
 }
 
 func (gates *Controller) startSingleGateCycle(g *Gate) {
-	println("Single gate ", g.Name)
+	println("Starting cycle: ", g.Name)
 	gates.singleGate = g
 	gates.cycleTicks = -1
 }
@@ -135,7 +135,7 @@ func (gates *Controller) openGate(g *Gate) {
 			gates.Reset()
 		}
 	} else if gates.gate1Closed {
-		println("Single gate cycle finished", g.Name)
+		println("Cycle finished: ", g.Name)
 		gates.Reset()
 	}
 	gates.cycleTicks++
@@ -189,26 +189,26 @@ func (gates *Controller) cycleGates() {
 			gates.Reset()
 		}
 	} else if gates.gate2Closed {
-		println("Cycle finished")
+		println("Cycle finished: ", gates.gate1.Name, "=>", gates.gate2.Name)
 		gates.Reset()
 	}
 	gates.cycleTicks++
 }
 
 func (gates *Controller) startInboundCycle() {
-	println("Starting inbound cycle")
 	gates.Reset()
 	gates.inbound = true
 	gates.gate1 = gates.outerGate
 	gates.gate2 = gates.innerGate
+	println("Starting cycle: ", gates.gate1.Name, "=>", gates.gate2.Name)
 }
 
 func (gates *Controller) startOutboundCycle() {
-	println("Starting outbound cycle")
 	gates.Reset()
 	gates.outbound = true
 	gates.gate1 = gates.innerGate
 	gates.gate2 = gates.outerGate
+	println("Starting cycle: ", gates.gate1.Name, "=>", gates.gate2.Name)
 }
 
 func (gates *Controller) handleStuckRequest() {

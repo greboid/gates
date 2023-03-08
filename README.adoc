@@ -35,6 +35,7 @@ Outbound:: Going from the inner side to the outer side.
  - Inner gate is opening or closing (D9)
  - Inbound cycle in progress (D6)
  - Outbound cycle in progress (D7)
+ - Combined gate open (ADC2)
 
 == Logic
 - It is assumed gates auto close.

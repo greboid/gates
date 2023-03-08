@@ -37,6 +37,7 @@ type Controller struct {
 	gate2             *Gate
 	cycleTicks        int
 	stuckRequestInput machine.Pin
+	gatesOpenOutput   machine.Pin
 }
 
 func main() {
@@ -62,6 +63,7 @@ func main() {
 		inboundCycling:    machine.D6,
 		outboundCycling:   machine.D7,
 		stuckRequestInput: machine.D12,
+		gatesOpenOutput:   machine.ADC2,
 	}
 	gates.Init()
 	for {
@@ -70,6 +72,12 @@ func main() {
 			gates.handleStuckGates()
 		} else if !gates.stuckRequestInput.Get() {
 			gates.handleStuckRequest()
+		} else if gates.gate2Opened && !gates.gate2Closed && gates.outerGate.isOpen() && outerGate.checkOpenRequestInput() {
+			gates.Reset()
+			gates.startInboundCycle()
+		} else if gates.gate2Opened && !gates.gate2Closed && gates.innerGate.isOpen() && innerGate.checkOpenRequestInput() {
+			gates.Reset()
+			gates.startOutboundCycle()
 		} else if gates.gate1 != nil && gates.gate2 != nil {
 			gates.cycleGates()
 		} else if outerGate.checkOpenRequestInput() && innerGate.isClosed() {
@@ -238,6 +246,7 @@ func (gates *Controller) setStatusLEDs() {
 	gates.outerGate.closedOutput.Set(gates.outerGate.isClosed())
 	gates.inboundCycling.Set(gates.inbound)
 	gates.outboundCycling.Set(gates.outbound)
+	gates.gatesOpenOutput.Set((gates.innerGate.isOpen() || gates.outerGate.isOpen()) || ((gates.inbound || gates.outbound) && (gates.gate1Opened && !gates.gate2Closed)))
 }
 
 func (g *Gate) isClosed() bool {

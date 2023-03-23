@@ -171,21 +171,21 @@ func (gates *Controller) cycleGates() {
 			gates.gate2.openRequestOutput.High()
 			gates.gate2.workingOutput.High()
 		} else if gates.gate2.isOpen() {
-			println("Opened ", gates.gate1.Name)
+			println("Opened ", gates.gate2.Name)
 			gates.gate2Opened = true
 			gates.gate2.openRequestOutput.Low()
 		} else if gates.cycleTicks >= gateOpenTimeout {
-			println("Timing out opening ", gates.gate1.Name)
+			println("Timing out opening ", gates.gate2.Name)
 			gates.Reset()
 		}
 	} else if !gates.gate2Closed {
 		if gates.gate2.isClosed() {
-			println("Closed ", gates.gate1.Name)
+			println("Closed ", gates.gate2.Name)
 			gates.gate2Closed = true
 			gates.cycleTicks = -1
 			gates.gate2.workingOutput.Low()
 		} else if gates.cycleTicks >= gateCloseTimeout {
-			println("Timing out closing ", gates.gate1.Name)
+			println("Timing out closing ", gates.gate2.Name)
 			gates.Reset()
 		}
 	} else if gates.gate2Closed {

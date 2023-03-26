@@ -19,6 +19,7 @@ type Gate struct {
 	openRequestOutput machine.Pin
 	workingOutput     machine.Pin
 	enabledInput      machine.Pin
+	working           bool
 }
 
 type Controller struct {
@@ -40,34 +41,36 @@ type Controller struct {
 	cycleTicks        int
 	stuckRequestInput machine.Pin
 	gatesOpenOutput   machine.Pin
+	debug             machine.Pin
 }
 
 func main() {
 	outerGate := &Gate{
 		Name:              "Outer",
-		openRequestInput:  machine.D2,
-		closedInput:       machine.D4,
-		openRequestOutput: machine.ADC0,
-		closedOutput:      machine.D10,
-		workingOutput:     machine.D8,
-		enabledInput:      machine.ADC3,
+		openRequestInput:  machine.D6,   //Terminal
+		openRequestOutput: machine.D2,   //Terminal
+		closedInput:       machine.D5,   //Terminal
+		closedOutput:      machine.ADC1, //LED
+		workingOutput:     machine.ADC2, //LED
+		enabledInput:      machine.D10,  //Jumper
 	}
 	innerGate := &Gate{
 		Name:              "Inner",
-		openRequestInput:  machine.D3,
-		closedInput:       machine.D5,
-		openRequestOutput: machine.ADC1,
-		closedOutput:      machine.D11,
-		workingOutput:     machine.D9,
-		enabledInput:      machine.ADC4,
+		openRequestInput:  machine.D7,   //Terminal
+		openRequestOutput: machine.D3,   //Terminal
+		closedInput:       machine.D8,   //Terminal
+		closedOutput:      machine.ADC4, //LED
+		workingOutput:     machine.ADC3, //LED
+		enabledInput:      machine.D9,   //Jumper
 	}
 	gates := &Controller{
+		debug:             machine.D12,
 		outerGate:         outerGate,
 		innerGate:         innerGate,
-		inboundCycling:    machine.D6,
-		outboundCycling:   machine.D7,
-		stuckRequestInput: machine.D12,
-		gatesOpenOutput:   machine.ADC2,
+		inboundCycling:    machine.ADC0, //LED
+		outboundCycling:   machine.ADC5, //LED
+		stuckRequestInput: machine.D11,  //Terminal
+		gatesOpenOutput:   machine.D4,   //Terminal
 	}
 	gates.Init()
 	for {
@@ -116,7 +119,7 @@ func (gates *Controller) openGate(g *Gate) {
 		if gates.cycleTicks == 0 {
 			println("Opening ", g.Name)
 			g.openRequestOutput.High()
-			g.workingOutput.High()
+			g.working = true
 		} else if g.isOpen() {
 			gates.gate1Opened = true
 			g.openRequestOutput.Low()
@@ -129,7 +132,7 @@ func (gates *Controller) openGate(g *Gate) {
 			println("Closed", g.Name)
 			gates.gate1Closed = true
 			gates.cycleTicks = -1
-			g.workingOutput.Low()
+			g.working = false
 		} else if gates.cycleTicks >= gateCloseTimeout {
 			println("Timing out closing ", g.Name)
 			gates.Reset()
@@ -146,7 +149,7 @@ func (gates *Controller) cycleGates() {
 		if gates.cycleTicks == 0 {
 			println("Opening ", gates.gate1.Name)
 			gates.gate1.openRequestOutput.High()
-			gates.gate1.workingOutput.High()
+			gates.gate1.working = true
 		} else if gates.gate1.isOpen() {
 			println("Opened ", gates.gate1.Name)
 			gates.gate1Opened = true
@@ -160,20 +163,20 @@ func (gates *Controller) cycleGates() {
 			println("Closed ", gates.gate1.Name)
 			gates.gate1Closed = true
 			gates.cycleTicks = -1
-			gates.gate1.workingOutput.Low()
+			gates.gate1.working = false
 		} else if gates.cycleTicks >= gateCloseTimeout {
 			println("Timing out closing ", gates.gate1.Name)
 			gates.Reset()
 		}
 	} else if gates.gate1Closed && !gates.gate2Opened {
 		if gates.cycleTicks == 0 {
-			println("Opening ", gates.gate1.Name)
+			println("Opening ", gates.gate2.Name)
 			gates.gate2.openRequestOutput.High()
-			gates.gate2.workingOutput.High()
+			gates.gate2.working = true
 		} else if gates.gate2.isOpen() {
 			println("Opened ", gates.gate2.Name)
 			gates.gate2Opened = true
-			gates.gate2.openRequestOutput.Low()
+			gates.gate2.working = false
 		} else if gates.cycleTicks >= gateOpenTimeout {
 			println("Timing out opening ", gates.gate2.Name)
 			gates.Reset()
@@ -183,7 +186,7 @@ func (gates *Controller) cycleGates() {
 			println("Closed ", gates.gate2.Name)
 			gates.gate2Closed = true
 			gates.cycleTicks = -1
-			gates.gate2.workingOutput.Low()
+			gates.gate2.working = false
 		} else if gates.cycleTicks >= gateCloseTimeout {
 			println("Timing out closing ", gates.gate2.Name)
 			gates.Reset()
@@ -217,17 +220,17 @@ func (gates *Controller) handleStuckRequest() {
 	if gates.innerGate.isOpen() {
 		println("Stuck: innergate open, opening inner")
 		gates.stuckGate = gates.innerGate
-		gates.innerGate.workingOutput.High()
+		gates.innerGate.working = true
 		gates.innerGate.openRequestOutput.High()
 	} else if gates.outerGate.isOpen() {
 		println("Stuck: outergate open, opening outer")
 		gates.stuckGate = gates.outerGate
-		gates.outerGate.workingOutput.High()
+		gates.outerGate.working = true
 		gates.outerGate.openRequestOutput.High()
 	} else {
 		println("Stuck: Opening outer")
 		gates.stuckGate = gates.outerGate
-		gates.outerGate.workingOutput.High()
+		gates.outerGate.working = true
 		gates.outerGate.openRequestOutput.High()
 	}
 }
@@ -253,6 +256,7 @@ func (gates *Controller) handleStuckGates() {
 }
 
 func (gates *Controller) Init() {
+	gates.debug.Configure(machine.PinConfig{Mode: machine.PinInputPullup})
 	gates.stuckRequestInput.Configure(machine.PinConfig{Mode: machine.PinInputPullup})
 	gates.inboundCycling.Configure(machine.PinConfig{Mode: machine.PinOutput})
 	gates.outboundCycling.Configure(machine.PinConfig{Mode: machine.PinOutput})
@@ -287,20 +291,34 @@ func (g *Gate) Init() {
 	g.openRequestOutput.Configure(machine.PinConfig{Mode: machine.PinOutput})
 	g.workingOutput.Configure(machine.PinConfig{Mode: machine.PinOutput})
 	g.openRequestOutput.Low()
-	g.workingOutput.Low()
+	println("Gate ", g.Name, " enabled: ", g.isEnabled())
 }
 
 func (g *Gate) Reset() {
 	g.openRequestOutput.Low()
-	g.workingOutput.Low()
+	g.working = false
+}
+
+func (gates *Controller) isDebug() bool {
+	return !gates.debug.Get()
 }
 
 func (gates *Controller) setStatusLEDs() {
-	gates.innerGate.closedOutput.Set(gates.innerGate.isClosed())
-	gates.outerGate.closedOutput.Set(gates.outerGate.isClosed())
-	gates.inboundCycling.Set(gates.inbound)
-	gates.outboundCycling.Set(gates.outbound)
-	gates.gatesOpenOutput.Set((gates.innerGate.isOpen() || gates.outerGate.isOpen()) || ((gates.inbound || gates.outbound) && (gates.gate1Opened && !gates.gate2Closed)))
+	if gates.isDebug() {
+		gates.innerGate.workingOutput.Set(gates.innerGate.working)
+		gates.innerGate.closedOutput.Set(gates.innerGate.isClosed())
+		gates.outerGate.closedOutput.Set(gates.outerGate.isClosed())
+		gates.inboundCycling.Set(gates.inbound)
+		gates.outboundCycling.Set(gates.outbound)
+		gates.gatesOpenOutput.Set((gates.innerGate.isOpen() || gates.outerGate.isOpen()) || ((gates.inbound || gates.outbound) && (gates.gate1Opened && !gates.gate2Closed)))
+	} else {
+		gates.innerGate.workingOutput.Low()
+		gates.innerGate.closedOutput.Low()
+		gates.outerGate.closedOutput.Low()
+		gates.inboundCycling.Low()
+		gates.outboundCycling.Low()
+		gates.gatesOpenOutput.Low()
+	}
 }
 
 func (g *Gate) isClosed() bool {

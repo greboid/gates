@@ -2,35 +2,54 @@ package main
 
 import "machine"
 
-type Gate struct {
-	Name              string
-	openRequestInput  machine.Pin
-	closedInput       machine.Pin
-	closedOutput      machine.Pin
-	openRequestOutput machine.Pin
-	workingOutput     machine.Pin
-	enabledInput      machine.Pin
-	working           bool
-}
+//go:generate go run golang.org/x/tools/cmd/stringer@latest -type=State
 
-type Controller struct {
-	stuckStarted      bool
-	stuckGate         *Gate
-	singleGate        *Gate
-	inbound           bool
-	outbound          bool
-	gate1Opened       bool
-	gate1Closed       bool
-	gate2Opened       bool
-	gate2Closed       bool
-	outerGate         *Gate
-	innerGate         *Gate
-	inboundCycling    machine.Pin
-	outboundCycling   machine.Pin
-	gate1             *Gate
-	gate2             *Gate
-	cycleTicks        int
-	stuckRequestInput machine.Pin
-	gatesOpenOutput   machine.Pin
-	debug             machine.Pin
+const (
+	InboundCycleStarted State = iota
+	InboundCycleFirstWaiting
+	InboundCycleFirstOpened
+	InboundCycleFirstClosed
+	InboundCycleSecondWaiting
+	InboundCycleSecondOpened
+	InboundCycleCompleted
+	OutboundCycleStarted
+	OutboundCycleFirstWaiting
+	OutboundCycleFirstOpened
+	OutboundCycleFirstClosed
+	OutboundCycleSecondWaiting
+	OutboundCycleSecondOpened
+	OutboundCycleCompleted
+	StuckCycleStarted
+	StuckCycleOuterWaiting
+	StuckCycleOuterOpened
+	StuckCycleInnerWaiting
+	StuckCycleInnerOpened
+	StuckCycleComplete
+	Idle
+)
+
+type (
+	State int
+	Door  struct {
+		Open                bool
+		Enabled             bool
+		requestOpenPin      machine.Pin
+		inputRequestOpenPin machine.Pin
+		isOpenPin           machine.Pin
+		isEnabledPin        machine.Pin
+	}
+)
+
+type Context struct {
+	State           State
+	Inner           *Door
+	Outer           *Door
+	InboundRequest  bool
+	OutboundRequest bool
+	StuckRequest    bool
+	Ticks           int
+	inboundPin      machine.Pin
+	outboundPin     machine.Pin
+	stuckCyclePin   machine.Pin
+	isClosedPin     machine.Pin
 }

@@ -6,278 +6,247 @@ import (
 )
 
 const (
-	gateOpenTimeout  = 50   //In number of ticks, so varies depending on sleep interval
-	gateCloseTimeout = 1200 //In number of ticks, so varies depending on sleep interval
-	SleepInterval    = 100  // In milliseconds
-)
-
-var (
-	gates = &Controller{
-		debug: machine.D12,
-		outerGate: &Gate{
-			Name:              "Outer",
-			openRequestInput:  machine.D6,   //Terminal
-			openRequestOutput: machine.D2,   //Terminal
-			closedInput:       machine.D5,   //Terminal
-			closedOutput:      machine.ADC1, //LED
-			workingOutput:     machine.ADC2, //LED
-			enabledInput:      machine.D10,  //Jumper
-		},
-		innerGate: &Gate{
-			Name:              "Inner",
-			openRequestInput:  machine.D7,   //Terminal
-			openRequestOutput: machine.D3,   //Terminal
-			closedInput:       machine.D8,   //Terminal
-			closedOutput:      machine.ADC4, //LED
-			workingOutput:     machine.ADC3, //LED
-			enabledInput:      machine.D9,   //Jumper
-		},
-		inboundCycling:    machine.ADC0, //LED
-		outboundCycling:   machine.ADC5, //LED
-		stuckRequestInput: machine.D11,  //Terminal
-		gatesOpenOutput:   machine.D4,   //Terminal
-	}
+	OpenTimeout   = 50   //In number of ticks, so varies depending on sleep interval
+	CloseTimeout  = 1200 //In number of ticks, so varies depending on sleep interval
+	SleepInterval = 100  // In milliseconds
 )
 
 func main() {
-	gates.Init()
+	context := Context{
+		State: Idle,
+		Inner: &Door{
+			requestOpenPin: machine.D3,
+			isOpenPin:      machine.D8,
+			isEnabledPin:   machine.D9,
+		},
+		Outer: &Door{
+			requestOpenPin: machine.D2,
+			isOpenPin:      machine.D5,
+			isEnabledPin:   machine.D10,
+		},
+		inboundPin:    machine.D6,
+		outboundPin:   machine.D7,
+		stuckCyclePin: machine.D12,
+		isClosedPin:   machine.D13,
+	}
+	context.Inner.requestOpenPin.Configure(machine.PinConfig{Mode: machine.PinOutput})
+	context.Inner.isOpenPin.Configure(machine.PinConfig{Mode: machine.PinInputPullup})
+	context.Inner.isEnabledPin.Configure(machine.PinConfig{Mode: machine.PinInputPullup})
+	context.Inner.requestOpenPin.Low()
+
+	context.Outer.requestOpenPin.Configure(machine.PinConfig{Mode: machine.PinOutput})
+	context.Outer.isOpenPin.Configure(machine.PinConfig{Mode: machine.PinInputPullup})
+	context.Outer.isEnabledPin.Configure(machine.PinConfig{Mode: machine.PinInputPullup})
+	context.Outer.requestOpenPin.Low()
+
+	context.inboundPin.Configure(machine.PinConfig{Mode: machine.PinInputPullup})
+	context.outboundPin.Configure(machine.PinConfig{Mode: machine.PinInputPullup})
+	context.stuckCyclePin.Configure(machine.PinConfig{Mode: machine.PinInputPullup})
+	context.isClosedPin.Configure(machine.PinConfig{Mode: machine.PinOutput})
 	for {
-		if gates.outerGate.isEnabled() && gates.innerGate.isEnabled() {
-			if gates.stuckGate != nil {
-				gates.handleStuckGates()
-			} else if !gates.stuckRequestInput.Get() {
-				gates.handleStuckRequest()
-			} else if gates.gate2Opened && !gates.gate2Closed && gates.outerGate.isOpen() && gates.outerGate.checkOpenRequestInput() {
-				gates.Reset()
-				gates.startInboundCycle()
-			} else if gates.gate2Opened && !gates.gate2Closed && gates.innerGate.isOpen() && gates.innerGate.checkOpenRequestInput() {
-				gates.Reset()
-				gates.startOutboundCycle()
-			} else if gates.gate1 != nil && gates.gate2 != nil {
-				gates.cycleGates()
-			} else if gates.outerGate.checkOpenRequestInput() && gates.innerGate.isClosed() {
-				gates.startInboundCycle()
-			} else if gates.innerGate.checkOpenRequestInput() && gates.outerGate.isClosed() {
-				gates.startOutboundCycle()
+		context.Update()
+		switch context.State {
+		case Idle:
+			if context.InboundRequest {
+				context.ChangeState(InboundCycleStarted)
+			} else if context.OutboundRequest {
+				context.ChangeState(OutboundCycleStarted)
+			} else if context.StuckRequest {
+				context.ChangeState(StuckCycleStarted)
 			}
-		} else if gates.singleGate != nil {
-			gates.openGate(gates.singleGate)
-		} else if !gates.outerGate.isEnabled() && gates.innerGate.isEnabled() {
-			if (gates.innerGate.checkOpenRequestInput() || gates.outerGate.checkOpenRequestInput()) && gates.innerGate.isClosed() {
-				gates.startSingleGateCycle(gates.innerGate)
+			break
+		case InboundCycleStarted:
+			context.Outer.SetOpenRequest(true)
+			context.Ticks = 0
+			context.ChangeState(InboundCycleFirstWaiting)
+			break
+		case InboundCycleFirstWaiting:
+			context.Outer.SetOpenRequest(false)
+			if context.Outer.Open {
+				context.Ticks = 0
+				context.ChangeState(InboundCycleFirstOpened)
+			} else if context.Ticks > OpenTimeout {
+				context.ChangeState(Idle)
+			} else {
+				context.Ticks++
 			}
-		} else if !gates.innerGate.isEnabled() && gates.outerGate.isEnabled() {
-			if (gates.innerGate.checkOpenRequestInput() || gates.outerGate.checkOpenRequestInput()) && gates.outerGate.isClosed() {
-				gates.startSingleGateCycle(gates.outerGate)
+			break
+		case InboundCycleFirstOpened:
+			if !context.Outer.Open {
+				context.ChangeState(InboundCycleFirstClosed)
+			} else if context.Ticks > CloseTimeout {
+				context.ChangeState(Idle)
+			} else {
+				context.Ticks++
 			}
+			break
+		case InboundCycleFirstClosed:
+			if context.Inner.Enabled {
+				context.Inner.SetOpenRequest(true)
+				context.Ticks = 0
+				context.ChangeState(InboundCycleSecondWaiting)
+			} else {
+				context.ChangeState(InboundCycleCompleted)
+			}
+			break
+		case InboundCycleSecondWaiting:
+			context.Inner.SetOpenRequest(false)
+			if context.Inner.Open {
+				context.Ticks = 0
+				context.ChangeState(InboundCycleSecondOpened)
+			} else if context.Ticks > OpenTimeout {
+				context.ChangeState(Idle)
+			} else {
+				context.Ticks++
+			}
+			break
+		case InboundCycleSecondOpened:
+			if !context.Inner.Open {
+				context.ChangeState(InboundCycleCompleted)
+			} else if context.Ticks > CloseTimeout {
+				context.ChangeState(Idle)
+			} else if context.InboundRequest {
+				context.ChangeState(OutboundCycleStarted)
+			} else {
+				context.Ticks++
+			}
+			break
+		case InboundCycleCompleted:
+			context.ChangeState(Idle)
+			break
+		case OutboundCycleStarted:
+			context.Inner.SetOpenRequest(true)
+			context.Ticks = 0
+			context.ChangeState(OutboundCycleFirstWaiting)
+			break
+		case OutboundCycleFirstWaiting:
+			context.Inner.SetOpenRequest(false)
+			if context.Inner.Open {
+				context.Ticks = 0
+				context.ChangeState(OutboundCycleFirstOpened)
+			} else if context.Ticks > OpenTimeout {
+				context.ChangeState(Idle)
+			} else {
+				context.Ticks++
+			}
+			break
+		case OutboundCycleFirstOpened:
+			if !context.Inner.Open {
+				context.ChangeState(OutboundCycleFirstClosed)
+			} else if context.Ticks > CloseTimeout {
+				context.ChangeState(Idle)
+			} else {
+				context.Ticks++
+			}
+		case OutboundCycleFirstClosed:
+			if context.Outer.Enabled {
+				context.Outer.SetOpenRequest(true)
+				context.Ticks = 0
+				context.ChangeState(OutboundCycleSecondWaiting)
+			} else {
+				context.ChangeState(OutboundCycleCompleted)
+			}
+			break
+		case OutboundCycleSecondWaiting:
+			context.Outer.SetOpenRequest(false)
+			if context.Outer.Open {
+				context.Ticks = 0
+				context.ChangeState(OutboundCycleSecondOpened)
+			} else if context.Ticks > OpenTimeout {
+				context.ChangeState(Idle)
+			} else {
+				context.Ticks++
+			}
+			break
+		case OutboundCycleSecondOpened:
+			if !context.Outer.Open {
+				context.ChangeState(OutboundCycleCompleted)
+			} else if context.Ticks > CloseTimeout {
+				context.ChangeState(Idle)
+			} else if context.InboundRequest {
+				context.ChangeState(InboundCycleStarted)
+			} else {
+				context.Ticks++
+			}
+			break
+		case OutboundCycleCompleted:
+			context.ChangeState(Idle)
+			break
+		case StuckCycleStarted:
+			if !context.Outer.Enabled || !context.Inner.Enabled {
+				context.ChangeState(StuckCycleComplete)
+			} else if context.Outer.Open {
+				context.Outer.SetOpenRequest(true)
+				context.Ticks = 0
+				context.ChangeState(StuckCycleOuterWaiting)
+			} else if context.Inner.Open {
+				context.Inner.SetOpenRequest(true)
+				context.Ticks = 0
+				context.ChangeState(StuckCycleInnerWaiting)
+			} else {
+				context.Outer.SetOpenRequest(true)
+				context.Ticks = 0
+				context.ChangeState(StuckCycleOuterWaiting)
+			}
+			break
+		case StuckCycleOuterWaiting:
+			context.Outer.SetOpenRequest(false)
+			if context.Outer.Open {
+				context.Ticks = 0
+				context.ChangeState(StuckCycleOuterOpened)
+			} else if context.Ticks > OpenTimeout {
+				context.ChangeState(Idle)
+			} else {
+				context.Ticks++
+			}
+			break
+		case StuckCycleOuterOpened:
+			if !context.Outer.Open {
+				context.ChangeState(StuckCycleComplete)
+			}
+			break
+		case StuckCycleInnerWaiting:
+			context.Inner.SetOpenRequest(false)
+			if context.Inner.Open {
+				context.Ticks = 0
+				context.ChangeState(StuckCycleInnerOpened)
+			} else if context.Ticks > OpenTimeout {
+				context.ChangeState(Idle)
+			} else {
+				context.Ticks++
+			}
+			break
+		case StuckCycleInnerOpened:
+			if !context.Inner.Open {
+				context.ChangeState(StuckCycleComplete)
+			}
+			break
+		case StuckCycleComplete:
+			context.ChangeState(Idle)
+			break
 		}
 		time.Sleep(SleepInterval * time.Millisecond)
 	}
 }
 
-func (gates *Controller) startSingleGateCycle(g *Gate) {
-	println("Starting cycle: ", g.Name)
-	gates.singleGate = g
-	gates.cycleTicks = -1
+func (c *Context) ChangeState(newState State) {
+	println("Moving from ", c.State.String(), "to ", newState.String())
+	c.State = newState
 }
 
-func (gates *Controller) openGate(g *Gate) {
-	if !gates.gate1Opened {
-		if gates.cycleTicks == 0 {
-			println("Opening ", g.Name)
-			g.openRequestOutput.High()
-			g.working = true
-		} else if g.isOpen() {
-			gates.gate1Opened = true
-			g.openRequestOutput.Low()
-		} else if gates.cycleTicks >= gateOpenTimeout {
-			println("Timing out opening ", g.Name)
-			gates.Reset()
-		}
-	} else if !gates.gate1Closed {
-		if g.isClosed() {
-			println("Closed", g.Name)
-			gates.gate1Closed = true
-			gates.cycleTicks = -1
-			g.working = false
-		} else if gates.cycleTicks >= gateCloseTimeout {
-			println("Timing out closing ", g.Name)
-			gates.Reset()
-		}
-	} else if gates.gate1Closed {
-		println("Cycle finished: ", g.Name)
-		gates.Reset()
-	}
-	gates.cycleTicks++
+func (c *Context) Update() {
+	c.Inner.Update()
+	c.Outer.Update()
+	c.InboundRequest = c.inboundPin.Get()
+	c.OutboundRequest = c.outboundPin.Get()
+	c.StuckRequest = c.stuckCyclePin.Get()
 }
 
-func (gates *Controller) cycleGates() {
-	if !gates.gate1Opened {
-		if gates.cycleTicks == 0 {
-			println("Opening ", gates.gate1.Name)
-			gates.gate1.openRequestOutput.High()
-			gates.gate1.working = true
-		} else if gates.gate1.isOpen() {
-			println("Opened ", gates.gate1.Name)
-			gates.gate1Opened = true
-			gates.gate1.openRequestOutput.Low()
-		} else if gates.cycleTicks >= gateOpenTimeout {
-			println("Timing out opening ", gates.gate1.Name)
-			gates.Reset()
-		}
-	} else if !gates.gate1Closed {
-		if gates.gate1.isClosed() {
-			println("Closed ", gates.gate1.Name)
-			gates.gate1Closed = true
-			gates.cycleTicks = -1
-			gates.gate1.working = false
-		} else if gates.cycleTicks >= gateCloseTimeout {
-			println("Timing out closing ", gates.gate1.Name)
-			gates.Reset()
-		}
-	} else if gates.gate1Closed && !gates.gate2Opened {
-		if gates.cycleTicks == 0 {
-			println("Opening ", gates.gate2.Name)
-			gates.gate2.openRequestOutput.High()
-			gates.gate2.working = true
-		} else if gates.gate2.isOpen() {
-			println("Opened ", gates.gate2.Name)
-			gates.gate2Opened = true
-			gates.gate2.working = false
-		} else if gates.cycleTicks >= gateOpenTimeout {
-			println("Timing out opening ", gates.gate2.Name)
-			gates.Reset()
-		}
-	} else if !gates.gate2Closed {
-		if gates.gate2.isClosed() {
-			println("Closed ", gates.gate2.Name)
-			gates.gate2Closed = true
-			gates.cycleTicks = -1
-			gates.gate2.working = false
-		} else if gates.cycleTicks >= gateCloseTimeout {
-			println("Timing out closing ", gates.gate2.Name)
-			gates.Reset()
-		}
-	} else if gates.gate2Closed {
-		println("Cycle finished: ", gates.gate1.Name, "=>", gates.gate2.Name)
-		gates.Reset()
-	}
-	gates.cycleTicks++
+func (d *Door) Update() {
+	d.Open = d.isOpenPin.Get()
+	d.Enabled = d.isEnabledPin.Get()
 }
 
-func (gates *Controller) startInboundCycle() {
-	gates.Reset()
-	gates.inbound = true
-	gates.gate1 = gates.outerGate
-	gates.gate2 = gates.innerGate
-	println("Starting cycle: ", gates.gate1.Name, "=>", gates.gate2.Name)
-}
-
-func (gates *Controller) startOutboundCycle() {
-	gates.Reset()
-	gates.outbound = true
-	gates.gate1 = gates.innerGate
-	gates.gate2 = gates.outerGate
-	println("Starting cycle: ", gates.gate1.Name, "=>", gates.gate2.Name)
-}
-
-func (gates *Controller) handleStuckRequest() {
-	println("Stuck request received")
-	gates.Reset()
-	if gates.innerGate.isOpen() {
-		println("Stuck: innergate open, opening inner")
-		gates.stuckGate = gates.innerGate
-		gates.innerGate.working = true
-		gates.innerGate.openRequestOutput.High()
-	} else if gates.outerGate.isOpen() {
-		println("Stuck: outergate open, opening outer")
-		gates.stuckGate = gates.outerGate
-		gates.outerGate.working = true
-		gates.outerGate.openRequestOutput.High()
-	} else {
-		println("Stuck: Opening outer")
-		gates.stuckGate = gates.outerGate
-		gates.outerGate.working = true
-		gates.outerGate.openRequestOutput.High()
-	}
-}
-
-func (gates *Controller) handleStuckGates() {
-	if !gates.stuckStarted && gates.cycleTicks > gateOpenTimeout {
-		println("Stuck: Timeout opening, resetting")
-		gates.Reset()
-	} else if !gates.stuckStarted {
-		if gates.stuckGate.isOpen() {
-			println("Stuck: Gate opening, waiting for close")
-			gates.stuckStarted = true
-			gates.stuckGate.openRequestOutput.Low()
-		}
-	} else if gates.stuckStarted && gates.stuckGate.isClosed() {
-		println("Stuck complete")
-		gates.Reset()
-	} else if gates.stuckStarted && gates.cycleTicks > gateCloseTimeout {
-		println("Stuck: Timeout closing, resetting")
-		gates.Reset()
-	}
-	gates.cycleTicks++
-}
-
-func (gates *Controller) Init() {
-	gates.debug.Configure(machine.PinConfig{Mode: machine.PinInputPullup})
-	gates.stuckRequestInput.Configure(machine.PinConfig{Mode: machine.PinInputPullup})
-	gates.inboundCycling.Configure(machine.PinConfig{Mode: machine.PinOutput})
-	gates.outboundCycling.Configure(machine.PinConfig{Mode: machine.PinOutput})
-	gates.inboundCycling.Low()
-	gates.outboundCycling.Low()
-	gates.innerGate.Init()
-	gates.outerGate.Init()
-}
-
-func (gates *Controller) Reset() {
-	gates.stuckStarted = false
-	gates.stuckGate = nil
-	gates.gate2Opened = false
-	gates.gate2Closed = false
-	gates.gate1Opened = false
-	gates.gate1Closed = false
-	gates.singleGate = nil
-	gates.gate1 = nil
-	gates.gate2 = nil
-	gates.inbound = false
-	gates.outbound = false
-	gates.cycleTicks = 0
-	gates.innerGate.Reset()
-	gates.outerGate.Reset()
-}
-
-func (g *Gate) Init() {
-	g.openRequestInput.Configure(machine.PinConfig{Mode: machine.PinInputPullup})
-	g.closedInput.Configure(machine.PinConfig{Mode: machine.PinInputPullup})
-	g.enabledInput.Configure(machine.PinConfig{Mode: machine.PinInputPullup})
-	g.closedOutput.Configure(machine.PinConfig{Mode: machine.PinOutput})
-	g.openRequestOutput.Configure(machine.PinConfig{Mode: machine.PinOutput})
-	g.workingOutput.Configure(machine.PinConfig{Mode: machine.PinOutput})
-	g.openRequestOutput.Low()
-	println("Gate ", g.Name, " enabled: ", g.isEnabled())
-}
-
-func (g *Gate) Reset() {
-	g.openRequestOutput.Low()
-	g.working = false
-}
-
-func (g *Gate) isClosed() bool {
-	return g.closedInput.Get()
-}
-
-func (g *Gate) isOpen() bool {
-	return !g.closedInput.Get()
-}
-
-func (g *Gate) checkOpenRequestInput() bool {
-	return !g.openRequestInput.Get()
-}
-
-func (g *Gate) isEnabled() bool {
-	return !g.enabledInput.Get()
+func (d *Door) SetOpenRequest(state bool) {
+	d.requestOpenPin.Set(state)
 }

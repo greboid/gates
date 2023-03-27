@@ -11,96 +11,63 @@ const (
 	SleepInterval    = 100  // In milliseconds
 )
 
-type Gate struct {
-	Name              string
-	openRequestInput  machine.Pin
-	closedInput       machine.Pin
-	closedOutput      machine.Pin
-	openRequestOutput machine.Pin
-	workingOutput     machine.Pin
-	enabledInput      machine.Pin
-	working           bool
-}
-
-type Controller struct {
-	stuckStarted      bool
-	stuckGate         *Gate
-	singleGate        *Gate
-	inbound           bool
-	outbound          bool
-	gate1Opened       bool
-	gate1Closed       bool
-	gate2Opened       bool
-	gate2Closed       bool
-	outerGate         *Gate
-	innerGate         *Gate
-	inboundCycling    machine.Pin
-	outboundCycling   machine.Pin
-	gate1             *Gate
-	gate2             *Gate
-	cycleTicks        int
-	stuckRequestInput machine.Pin
-	gatesOpenOutput   machine.Pin
-	debug             machine.Pin
-}
-
-func main() {
-	outerGate := &Gate{
-		Name:              "Outer",
-		openRequestInput:  machine.D6,   //Terminal
-		openRequestOutput: machine.D2,   //Terminal
-		closedInput:       machine.D5,   //Terminal
-		closedOutput:      machine.ADC1, //LED
-		workingOutput:     machine.ADC2, //LED
-		enabledInput:      machine.D10,  //Jumper
-	}
-	innerGate := &Gate{
-		Name:              "Inner",
-		openRequestInput:  machine.D7,   //Terminal
-		openRequestOutput: machine.D3,   //Terminal
-		closedInput:       machine.D8,   //Terminal
-		closedOutput:      machine.ADC4, //LED
-		workingOutput:     machine.ADC3, //LED
-		enabledInput:      machine.D9,   //Jumper
-	}
-	gates := &Controller{
-		debug:             machine.D12,
-		outerGate:         outerGate,
-		innerGate:         innerGate,
+var (
+	gates = &Controller{
+		debug: machine.D12,
+		outerGate: &Gate{
+			Name:              "Outer",
+			openRequestInput:  machine.D6,   //Terminal
+			openRequestOutput: machine.D2,   //Terminal
+			closedInput:       machine.D5,   //Terminal
+			closedOutput:      machine.ADC1, //LED
+			workingOutput:     machine.ADC2, //LED
+			enabledInput:      machine.D10,  //Jumper
+		},
+		innerGate: &Gate{
+			Name:              "Inner",
+			openRequestInput:  machine.D7,   //Terminal
+			openRequestOutput: machine.D3,   //Terminal
+			closedInput:       machine.D8,   //Terminal
+			closedOutput:      machine.ADC4, //LED
+			workingOutput:     machine.ADC3, //LED
+			enabledInput:      machine.D9,   //Jumper
+		},
 		inboundCycling:    machine.ADC0, //LED
 		outboundCycling:   machine.ADC5, //LED
 		stuckRequestInput: machine.D11,  //Terminal
 		gatesOpenOutput:   machine.D4,   //Terminal
 	}
+)
+
+func main() {
 	gates.Init()
 	for {
-		gates.setStatusLEDs()
-		if outerGate.isEnabled() && innerGate.isEnabled() {
+		if gates.outerGate.isEnabled() && gates.innerGate.isEnabled() {
 			if gates.stuckGate != nil {
 				gates.handleStuckGates()
 			} else if !gates.stuckRequestInput.Get() {
 				gates.handleStuckRequest()
-			} else if gates.gate2Opened && !gates.gate2Closed && gates.outerGate.isOpen() && outerGate.checkOpenRequestInput() {
+			} else if gates.gate2Opened && !gates.gate2Closed && gates.outerGate.isOpen() && gates.outerGate.checkOpenRequestInput() {
 				gates.Reset()
 				gates.startInboundCycle()
-			} else if gates.gate2Opened && !gates.gate2Closed && gates.innerGate.isOpen() && innerGate.checkOpenRequestInput() {
+			} else if gates.gate2Opened && !gates.gate2Closed && gates.innerGate.isOpen() && gates.innerGate.checkOpenRequestInput() {
 				gates.Reset()
 				gates.startOutboundCycle()
 			} else if gates.gate1 != nil && gates.gate2 != nil {
 				gates.cycleGates()
-			} else if outerGate.checkOpenRequestInput() && innerGate.isClosed() {
+			} else if gates.outerGate.checkOpenRequestInput() && gates.innerGate.isClosed() {
 				gates.startInboundCycle()
-			} else if innerGate.checkOpenRequestInput() && outerGate.isClosed() {
+			} else if gates.innerGate.checkOpenRequestInput() && gates.outerGate.isClosed() {
 				gates.startOutboundCycle()
 			}
 		} else if gates.singleGate != nil {
 			gates.openGate(gates.singleGate)
-		} else if !outerGate.isEnabled() && innerGate.isEnabled() {
-			if (innerGate.checkOpenRequestInput() || outerGate.checkOpenRequestInput()) && innerGate.isClosed() {
+		} else if !gates.outerGate.isEnabled() && gates.innerGate.isEnabled() {
+			if (gates.innerGate.checkOpenRequestInput() || gates.outerGate.checkOpenRequestInput()) && gates.innerGate.isClosed() {
 				gates.startSingleGateCycle(gates.innerGate)
 			}
-		} else if !innerGate.isEnabled() && outerGate.isEnabled() {
-			if (innerGate.checkOpenRequestInput() || outerGate.checkOpenRequestInput()) && outerGate.isClosed() {
+		} else if !gates.innerGate.isEnabled() && gates.outerGate.isEnabled() {
+			if (gates.innerGate.checkOpenRequestInput() || gates.outerGate.checkOpenRequestInput()) && gates.outerGate.isClosed() {
 				gates.startSingleGateCycle(gates.outerGate)
 			}
 		}
@@ -297,28 +264,6 @@ func (g *Gate) Init() {
 func (g *Gate) Reset() {
 	g.openRequestOutput.Low()
 	g.working = false
-}
-
-func (gates *Controller) isDebug() bool {
-	return !gates.debug.Get()
-}
-
-func (gates *Controller) setStatusLEDs() {
-	if gates.isDebug() {
-		gates.innerGate.workingOutput.Set(gates.innerGate.working)
-		gates.innerGate.closedOutput.Set(gates.innerGate.isClosed())
-		gates.outerGate.closedOutput.Set(gates.outerGate.isClosed())
-		gates.inboundCycling.Set(gates.inbound)
-		gates.outboundCycling.Set(gates.outbound)
-		gates.gatesOpenOutput.Set((gates.innerGate.isOpen() || gates.outerGate.isOpen()) || ((gates.inbound || gates.outbound) && (gates.gate1Opened && !gates.gate2Closed)))
-	} else {
-		gates.innerGate.workingOutput.Low()
-		gates.innerGate.closedOutput.Low()
-		gates.outerGate.closedOutput.Low()
-		gates.inboundCycling.Low()
-		gates.outboundCycling.Low()
-		gates.gatesOpenOutput.Low()
-	}
 }
 
 func (g *Gate) isClosed() bool {

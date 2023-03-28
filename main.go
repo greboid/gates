@@ -100,6 +100,7 @@ func main() {
 		case InboundCycleSecondWaiting:
 			if context.Inner.Open {
 				context.Inner.SetOpenRequest(false)
+				context.SetOpen(true)
 				context.Ticks = 0
 				context.ChangeState(InboundCycleSecondOpened)
 			} else if context.Ticks > OpenTimeout {
@@ -110,6 +111,7 @@ func main() {
 			break
 		case InboundCycleSecondOpened:
 			if !context.Inner.Open {
+				context.SetOpen(false)
 				context.ChangeState(InboundCycleCompleted)
 			} else if context.Ticks > CloseTimeout {
 				context.ChangeState(Idle)
@@ -165,6 +167,7 @@ func main() {
 			if context.Outer.Open {
 				context.Outer.SetOpenRequest(false)
 				context.Ticks = 0
+				context.SetOpen(true)
 				context.ChangeState(OutboundCycleSecondOpened)
 			} else if context.Ticks > OpenTimeout {
 				context.ChangeState(Idle)
@@ -174,6 +177,7 @@ func main() {
 			break
 		case OutboundCycleSecondOpened:
 			if !context.Outer.Open {
+				context.SetOpen(false)
 				context.ChangeState(OutboundCycleCompleted)
 			} else if context.Ticks > CloseTimeout {
 				context.ChangeState(Idle)
@@ -246,6 +250,10 @@ func main() {
 func (c *Context) ChangeState(newState State) {
 	println("Moving from ", c.State.String(), "to ", newState.String())
 	c.State = newState
+}
+
+func (c *Context) SetOpen(state bool) {
+	c.isClosedPin.Set(state)
 }
 
 func (c *Context) Update() {

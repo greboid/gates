@@ -49,6 +49,8 @@ func main() {
 		context.Update()
 		switch context.State {
 		case Idle:
+			context.Outer.SetOpenRequest(false)
+			context.Inner.SetOpenRequest(false)
 			if context.InboundRequest {
 				context.ChangeState(InboundCycleStarted)
 			} else if context.OutboundRequest {
@@ -70,6 +72,9 @@ func main() {
 			break
 		case InboundCycleFirstWaiting:
 			if context.Outer.Open {
+				if !context.Inner.Enabled {
+					context.SetOpen(true)
+				}
 				context.Outer.SetOpenRequest(false)
 				context.Ticks = 0
 				context.ChangeState(InboundCycleFirstOpened)
@@ -94,6 +99,7 @@ func main() {
 				context.Ticks = 0
 				context.ChangeState(InboundCycleSecondWaiting)
 			} else {
+				context.SetOpen(false)
 				context.ChangeState(InboundCycleCompleted)
 			}
 			break
@@ -137,6 +143,9 @@ func main() {
 			break
 		case OutboundCycleFirstWaiting:
 			if context.Inner.Open {
+				if !context.Outer.Enabled {
+					context.SetOpen(true)
+				}
 				context.Inner.SetOpenRequest(false)
 				context.Ticks = 0
 				context.ChangeState(OutboundCycleFirstOpened)
@@ -160,6 +169,7 @@ func main() {
 				context.Ticks = 0
 				context.ChangeState(OutboundCycleSecondWaiting)
 			} else {
+				context.SetOpen(false)
 				context.ChangeState(OutboundCycleCompleted)
 			}
 			break

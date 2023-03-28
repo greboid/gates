@@ -14,20 +14,20 @@ const (
 func main() {
 	context := Context{
 		State: Idle,
-		Inner: &Door{
-			requestOpenPin: machine.D3,
-			isOpenPin:      machine.D8,
-			isEnabledPin:   machine.D9,
-		},
 		Outer: &Door{
 			requestOpenPin: machine.D2,
-			isOpenPin:      machine.D5,
-			isEnabledPin:   machine.D10,
+			isOpenPin:      machine.D4,
+			isEnabledPin:   machine.D6,
 		},
-		inboundPin:    machine.D6,
-		outboundPin:   machine.D7,
-		stuckCyclePin: machine.D12,
-		isClosedPin:   machine.D13,
+		Inner: &Door{
+			requestOpenPin: machine.D3,
+			isOpenPin:      machine.D5,
+			isEnabledPin:   machine.D7,
+		},
+		inboundPin:    machine.D8,
+		outboundPin:   machine.D9,
+		stuckCyclePin: machine.D10,
+		isClosedPin:   machine.D11,
 	}
 	context.Inner.requestOpenPin.Configure(machine.PinConfig{Mode: machine.PinOutput})
 	context.Inner.isOpenPin.Configure(machine.PinConfig{Mode: machine.PinInputPullup})
@@ -43,6 +43,8 @@ func main() {
 	context.outboundPin.Configure(machine.PinConfig{Mode: machine.PinInputPullup})
 	context.stuckCyclePin.Configure(machine.PinConfig{Mode: machine.PinInputPullup})
 	context.isClosedPin.Configure(machine.PinConfig{Mode: machine.PinOutput})
+	context.isClosedPin.Low()
+
 	for {
 		context.Update()
 		switch context.State {
@@ -61,8 +63,8 @@ func main() {
 			context.ChangeState(InboundCycleFirstWaiting)
 			break
 		case InboundCycleFirstWaiting:
-			context.Outer.SetOpenRequest(false)
 			if context.Outer.Open {
+				context.Outer.SetOpenRequest(false)
 				context.Ticks = 0
 				context.ChangeState(InboundCycleFirstOpened)
 			} else if context.Ticks > OpenTimeout {
@@ -90,8 +92,8 @@ func main() {
 			}
 			break
 		case InboundCycleSecondWaiting:
-			context.Inner.SetOpenRequest(false)
 			if context.Inner.Open {
+				context.Inner.SetOpenRequest(false)
 				context.Ticks = 0
 				context.ChangeState(InboundCycleSecondOpened)
 			} else if context.Ticks > OpenTimeout {
@@ -120,8 +122,8 @@ func main() {
 			context.ChangeState(OutboundCycleFirstWaiting)
 			break
 		case OutboundCycleFirstWaiting:
-			context.Inner.SetOpenRequest(false)
 			if context.Inner.Open {
+				context.Inner.SetOpenRequest(false)
 				context.Ticks = 0
 				context.ChangeState(OutboundCycleFirstOpened)
 			} else if context.Ticks > OpenTimeout {
@@ -148,8 +150,8 @@ func main() {
 			}
 			break
 		case OutboundCycleSecondWaiting:
-			context.Outer.SetOpenRequest(false)
 			if context.Outer.Open {
+				context.Outer.SetOpenRequest(false)
 				context.Ticks = 0
 				context.ChangeState(OutboundCycleSecondOpened)
 			} else if context.Ticks > OpenTimeout {
@@ -190,8 +192,8 @@ func main() {
 			}
 			break
 		case StuckCycleOuterWaiting:
-			context.Outer.SetOpenRequest(false)
 			if context.Outer.Open {
+				context.Outer.SetOpenRequest(false)
 				context.Ticks = 0
 				context.ChangeState(StuckCycleOuterOpened)
 			} else if context.Ticks > OpenTimeout {
@@ -237,14 +239,14 @@ func (c *Context) ChangeState(newState State) {
 func (c *Context) Update() {
 	c.Inner.Update()
 	c.Outer.Update()
-	c.InboundRequest = c.inboundPin.Get()
-	c.OutboundRequest = c.outboundPin.Get()
-	c.StuckRequest = c.stuckCyclePin.Get()
+	c.InboundRequest = !c.inboundPin.Get()
+	c.OutboundRequest = !c.outboundPin.Get()
+	c.StuckRequest = !c.stuckCyclePin.Get()
 }
 
 func (d *Door) Update() {
-	d.Open = d.isOpenPin.Get()
-	d.Enabled = d.isEnabledPin.Get()
+	d.Open = !d.isOpenPin.Get()
+	d.Enabled = !d.isEnabledPin.Get()
 }
 
 func (d *Door) SetOpenRequest(state bool) {

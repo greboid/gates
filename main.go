@@ -51,6 +51,7 @@ func main() {
 		case Idle:
 			context.Outer.SetOpenRequest(false)
 			context.Inner.SetOpenRequest(false)
+			context.Ticks = 0
 			if context.InboundRequest {
 				context.ChangeState(InboundCycleStarted)
 			} else if context.OutboundRequest {

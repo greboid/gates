@@ -44,7 +44,6 @@ func main() {
 	context.stuckCyclePin.Configure(machine.PinConfig{Mode: machine.PinInputPullup})
 	context.isClosedPin.Configure(machine.PinConfig{Mode: machine.PinOutput})
 	context.isClosedPin.Low()
-
 	for {
 		context.Update()
 		switch context.State {
@@ -117,13 +116,14 @@ func main() {
 			}
 			break
 		case InboundCycleSecondOpened:
-			if !context.Inner.Open {
+			if context.OutboundRequest {
+				context.SetOpen(false)
+				context.ChangeState(OutboundCycleStarted)
+			} else if !context.Inner.Open {
 				context.SetOpen(false)
 				context.ChangeState(InboundCycleCompleted)
 			} else if context.Ticks > CloseTimeout {
 				context.ChangeState(Idle)
-			} else if context.InboundRequest {
-				context.ChangeState(OutboundCycleStarted)
 			} else {
 				context.Ticks++
 			}
@@ -187,13 +187,14 @@ func main() {
 			}
 			break
 		case OutboundCycleSecondOpened:
-			if !context.Outer.Open {
+			if context.InboundRequest {
+				context.SetOpen(false)
+				context.ChangeState(InboundCycleStarted)
+			} else if !context.Outer.Open {
 				context.SetOpen(false)
 				context.ChangeState(OutboundCycleCompleted)
 			} else if context.Ticks > CloseTimeout {
 				context.ChangeState(Idle)
-			} else if context.InboundRequest {
-				context.ChangeState(InboundCycleStarted)
 			} else {
 				context.Ticks++
 			}
